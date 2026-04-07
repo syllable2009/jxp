@@ -1,25 +1,35 @@
-.worktrees/
-.assets
-.docs
-.env
-*.pyc
-dist/
+# Python-generated files
+__pycache__/
+*.py[oc]
 build/
-*.egg-info/
-*.egg
-*.pycs
-*.pyo
-*.pyd
-*.pyw
-*.pyz
-*.pywz
-*.pyzz
+dist/
+wheels/
+*.egg-info
+.python-version
+.uv/
+uv.lock
+
+# 编译文件
+__pycache__/
+*.py[cod]
+*.so
+storage
+
+# Virtual environments
 .venv/
 venv/
-__pycache__/
-poetry.lock
-.pytest_cache/
-botpy.log
-nano.*.save
+.env
+.env.*
+!.env.example
+*.egg-info
+
+# idea
+.idea/
+.vscode/
+*.swp
+*.swo
 .DS_Store
-uv.lock
+
+# 日志
+logs/
+*.log
