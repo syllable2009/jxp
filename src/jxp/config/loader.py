@@ -4,8 +4,9 @@ from loguru import logger
 import pydantic
 from jxp.config.schema import Config
 
-
 _current_config_path: Path | None = None
+
+
 def get_config_path() -> Path:
     if _current_config_path is None:
         # Path.home()=自动获取你当前用户的home目录，在 Mac 上 = /Users/你的用户名
@@ -28,6 +29,28 @@ def load_config(config_path: Path | None = None) -> Config:
             logger.warning("Using default configuration.")
     return Config()
 
+
+def save_config(config: Config, config_path: Path | None = None) -> None:
+    """
+    Save configuration to file.
+
+    Args:
+        config: Configuration to save.
+        config_path: Optional path to save to. Uses default if not provided.
+    """
+    path = config_path or get_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = config.model_dump(mode="json", by_alias=True)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def set_config_path(path: Path) -> None:
+    """Set the current config path (used to derive data directory)."""
+    global _current_config_path
+    _current_config_path = path
 
 
 def _migrate_config(data: dict) -> dict:

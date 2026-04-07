@@ -16,3 +16,6 @@ uv run python src/jxp/cli/commands/commands.py serve \
 -v \
 -w ./my-workspace \
 -c ./config.toml
+
+
+uv run python src/jxp/cli/commands/commands.py onboard
