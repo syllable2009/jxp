@@ -95,7 +95,7 @@ def _infer_filename(url: str, content_disposition: str | None, content_type: str
         return f"{path_name}{ext}" if ext else path_name
 
     ext = _ext_from_content_type(content_type)
-    return f"{uuid.uuid4().hex}{ext}" if ext else f"{uuid.uuid4().hex}.file"
+    return f"{uuid.uuid4().hex}{ext}" if ext else f"{uuid.uuid4().hex}.bin"
 
 
 @app.command()
@@ -176,18 +176,35 @@ def down(
         url: str = typer.Option(..., "--url", "-l", help="File download URL"),
         destination: str = typer.Option(..., "--destination", "-d", help="Destination file path or directory"),
 ):
+    # 会将 ~ 符号自动转换为当前用户的家目录路径
     dest_path = Path(destination).expanduser()
+    # 判断用户路径最后有没有带斜杠，带斜杠 = 明确表示这是文件夹
+    trailing_sep = destination.endswith(("/", "\\"))
+    # 用户明确指定文件名+后缀时，优先使用用户输入，不做推测，不是以斜杠结尾，路径最后一段有名字，有后缀
+    user_explicit_file = (not trailing_sep) and bool(dest_path.name) and bool(dest_path.suffix)
     request = Request(url, headers=_browser_like_headers(url), method="GET")
 
     try:
         with urlopen(request, timeout=60) as resp:
-            content_disposition = resp.headers.get("Content-Disposition")
-            content_type = resp.headers.get("Content-Type")
-            filename = _infer_filename(url, content_disposition, content_type)
+            if user_explicit_file and not dest_path.is_dir():
+                save_path = dest_path
+            else:
+                # 目录判定：已有目录，或参数明确以路径分隔符结尾
+                is_directory = dest_path.is_dir() or trailing_sep
+                # Content-Disposition 是 HTTP 响应头里的一个字段，用来告诉浏览器：这个返回的内容该怎么处理。
+                # Content-Disposition: attachment; filename="example.pdf"
+                content_disposition = resp.headers.get("Content-Disposition")
+                content_type = resp.headers.get("Content-Type")
+                filename = _infer_filename(url, content_disposition, content_type)
+                save_path = dest_path / filename if is_directory else dest_path
 
-            save_path = dest_path / filename if dest_path.is_dir() or destination.endswith("/") else dest_path
-            if save_path.name in (".", ""):
-                save_path = dest_path / filename
+                # 兜底，避免异常输入导致文件名为空
+                if save_path.name in ("", "."):
+                    save_path = dest_path / filename
+
+            # 最终兜底，防止极端情况下无效文件名
+            if save_path.name in ("", "."):
+                save_path = dest_path / f"{uuid.uuid4().hex}.bin"
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
             with open(save_path, "wb") as f:
