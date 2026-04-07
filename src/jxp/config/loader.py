@@ -52,6 +52,20 @@ def set_config_path(path: Path) -> None:
     global _current_config_path
     _current_config_path = path
 
+def _load_runtime_config(config: str | None = None, workspace: str | None = None) -> Config:
+    pass
+
+def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]:
+    from importlib.resources import files as pkg_files
+    try:
+        tpl = pkg_files("jxp") / "templates"
+    except Exception:
+        return []
+    if not tpl.is_dir():
+        return []
+
+    added: list[str] = []
+    return added
 
 def _migrate_config(data: dict) -> dict:
     """Migrate old config formats to current."""
