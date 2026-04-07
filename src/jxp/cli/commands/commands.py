@@ -1,4 +1,6 @@
 import typer
+from jxp.config import get_config_path, load_config
+
 
 from jxp import __logo__
 # typer.Typer () = 创建一个命令行工具
@@ -63,5 +65,10 @@ def goodbye(name: str, formal: bool = False):
     else:
         print(f"Bye {name}!")
 
+
+
+
 if __name__ == "__main__":
-    app()
+    # app()
+    config = load_config()
+    print(config)
