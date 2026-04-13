@@ -12,6 +12,8 @@ from jxp import __logo__
 
 from rich.console import Console
 
+from jxp.config.schema import Config
+
 console = Console()
 # typer.Typer () = 创建一个命令行工具
 app = typer.Typer(
@@ -146,6 +148,12 @@ def agent(
         print(message)
     else:
         asyncio.run(run_once())
+    # 根据配置地址和工作空间地址，来获取配置
+    config = _load_runtime_config(config, workspace)
+    # 从默认的templates下复制基础文件到新的工作个空间
+    # sync_workspace_templates(config.workspace_path)
+    #
+
 
 @app.command()
 def serve(
@@ -215,7 +223,6 @@ def down(
                     f.write(chunk)
     except Exception as e:
         raise typer.BadParameter(f"下载失败: {e}") from e
-
     console.print(f"[green]Downloaded:[/green] {save_path}")
 
 
@@ -255,6 +262,9 @@ app.add_typer(plugins_app, name="plugins")
 def plugins_list():
     print(plugins_app)
 
+
+def _load_runtime_config(config: str | None = None, workspace: str | None = None) -> Config:
+    return Config()
 
 if __name__ == "__main__":
     # 运行文件 → 触发 app() → Typer 开始工作 → 解析你的命令 → 执行函数

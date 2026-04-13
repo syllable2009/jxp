@@ -17,6 +17,9 @@ uv run python src/jxp/cli/commands/commands.py serve \
 -w ./my-workspace \
 -c ./config.toml
 
+uv run python src/jxp/cli/commands/commands.py agent \
+-m "hello"
+
 
 uv run python src/jxp/cli/commands/commands.py onboard
 

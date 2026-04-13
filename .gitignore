@@ -1,35 +1,86 @@
-# Python-generated files
+# Python 编译生成文件
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.pyo
+*.pyd
+*.so
 build/
 dist/
 wheels/
-*.egg-info
-.python-version
+*.egg-info/
+*.egg
+*.spec
+
+# 依赖管理 (uv / pip / poetry)
 .uv/
 uv.lock
+.python-version
+Pipfile
+Pipfile.lock
+poetry.lock
 
-# 编译文件
-__pycache__/
-*.py[cod]
-*.so
-storage
-
-# Virtual environments
+# 虚拟环境
 .venv/
 venv/
+env/
+ENV/
 .env
 .env.*
 !.env.example
-*.egg-info
 
-# idea
+# 编辑器 & 系统文件
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .DS_Store
+Thumbs.db
 
-# 日志
+# 日志文件
 logs/
+log/
 *.log
+
+# FastAPI 后端专用
+storage/
+data/
+uploads/
+media/
+app.db
+*.db
+*.sqlite
+*.sqlite3
+tmp/
+temp/
+.cache/
+
+# 测试 & 覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# 证书 / 密钥 / 私密文件
+secrets/
+certs/
+*.pem
+*.key
+*.crt
+
+# ======================================
+# Uvicorn 热重载 专用忽略规则
+# ======================================
+# Uvicorn 运行时产生的 PID / 状态文件
+*.pid
+*.pid.lock
+# Uvicorn / 服务运行时套接字文件
+*.sock
+# 热重载产生的临时缓存
+.uvicorn/
+# 进程状态文件
+app.log.json
+# 服务运行时的工作目录
+worker.*
