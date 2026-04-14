@@ -23,11 +23,11 @@ uv run python src/jxp/cli/commands/commands.py agent \
 
 uv run python src/jxp/cli/commands/commands.py onboard
 
-python -m jxp.cli.commands.commands find-link \
+uv run python -m jxp.cli.commands.commands find-link \
   -l "https://fastly.picsum.photos/id/1/400/400.jpg?hmac=lOytrN6lDOH_Yx7NwwGIaCtxp6pyuH2V4hD6Eac-VI0" \
   -r "(?i)\.(jpg|jpeg|png|webp)(\?.*)?$"
 
-python -m jxp.cli.commands.commands find-link \
+uv run python -m jxp.cli.commands.commands find-link \
   -l "https://www.21voa.com/special_english/wilbur-and-orville-wright-the-first-airplane-93397.html" \
   -r "(?i)mp3(\?.*)?$"
 

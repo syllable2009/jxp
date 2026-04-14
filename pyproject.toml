@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nanobot = "jxp.cli.commands:app"
+nanobot = "jxp.cli.commands.commands:app"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]
