@@ -2,10 +2,13 @@ import typer
 import asyncio
 import mimetypes
 import os
+import re
 import uuid
 from pathlib import Path
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, urljoin
 from urllib.request import Request, urlopen
+from crawlee.crawlers import BeautifulSoupCrawler
+from playwright.async_api import async_playwright
 from jxp.config import get_config_path, load_config, set_config_path
 
 from jxp import __logo__
@@ -15,6 +18,7 @@ from rich.console import Console
 from jxp.config.schema import Config
 
 console = Console()
+crawler = BeautifulSoupCrawler(max_requests_per_crawl=10)
 # typer.Typer () = 创建一个命令行工具
 app = typer.Typer(
     # 定义命令的名字，对应终端的名字
@@ -100,6 +104,29 @@ def _infer_filename(url: str, content_disposition: str | None, content_type: str
     return f"{uuid.uuid4().hex}{ext}" if ext else f"{uuid.uuid4().hex}.bin"
 
 
+def _download_file(url: str, save_dir: Path, timeout: int = 60) -> Path:
+    request = Request(url, headers=_browser_like_headers(url), method="GET")
+    with urlopen(request, timeout=timeout) as resp:
+        content_disposition = resp.headers.get("Content-Disposition")
+        content_type = resp.headers.get("Content-Type")
+        filename = _infer_filename(url, content_disposition, content_type)
+        save_path = save_dir / filename
+
+        # 避免不同图片 URL 推导出相同文件名导致覆盖
+        if save_path.exists():
+            stem = save_path.stem or uuid.uuid4().hex
+            suffix = save_path.suffix
+            save_path = save_path.with_name(f"{stem}_{uuid.uuid4().hex[:8]}{suffix}")
+
+        with open(save_path, "wb") as f:
+            while True:
+                chunk = resp.read(1024 * 128)
+                if not chunk:
+                    break
+                f.write(chunk)
+    return save_path
+
+
 @app.command()
 def onboard(
         workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
@@ -133,6 +160,7 @@ def onboard(
 
 async def run_once():
     print(__logo__)
+
 
 @app.command()
 def agent(
@@ -227,6 +255,95 @@ def down(
 
 
 @app.command()
+def find_link(
+        url: str = typer.Option(..., "--url", "-l", help="Page URL to crawl images from"),
+        pattern: str = typer.Option(
+            r"""(?ix)\.(?:jpg|jpeg|png|gif|webp|bmp|svg|ico|avif)(?:\?.*)?$""",
+            "--pattern",
+            "-r",
+            help="Regex used to filter extracted URLs",
+        ),
+):
+    async def _collect_resource_urls(page_url: str, filter_pattern: re.Pattern[str]) -> list[str]:
+        # 提取 HTML 中的资源地址（img/src、srcset、CSS url() 等）
+        attr_pattern = re.compile(
+            r"""(?ix)
+            (?:src|href)\s*=\s*
+            (?:
+                "([^"]+)"
+                |'([^']+)'
+                |([^\s"'<>]+)
+            )
+            """
+        )
+        srcset_pattern = re.compile(
+            r"""(?ix)
+            srcset\s*=\s*
+            (?:
+                "([^"]+)"
+                |'([^']+)'
+                |([^\s"'<>]+)
+            )
+            """
+        )
+        css_url_pattern = re.compile(r"""(?ix)url\(\s*['"]?([^'")]+)['"]?\s*\)""")
+        http_url_pattern = re.compile(r"""https?://[^\s"'<>]+""", re.IGNORECASE)
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=False)
+            context = await browser.new_context()
+            page = await context.new_page()
+            await page.goto(page_url, wait_until="networkidle", timeout=60000)
+            html = await page.content()
+            await context.close()
+            await browser.close()
+
+        raw_urls: list[str] = []
+        for match in attr_pattern.finditer(html):
+            raw_urls.append(next((g for g in match.groups() if g), ""))
+        for match in srcset_pattern.finditer(html):
+            srcset_value = next((g for g in match.groups() if g), "")
+            for candidate in srcset_value.split(","):
+                url_part = candidate.strip().split(" ")[0]
+                if url_part:
+                    raw_urls.append(url_part)
+        for match in css_url_pattern.finditer(html):
+            raw_urls.append(match.group(1))
+        raw_urls.extend(http_url_pattern.findall(html))
+
+        filtered_urls = [u for u in raw_urls if filter_pattern.search(u)]
+        return filtered_urls if filtered_urls else raw_urls
+
+    try:
+        compiled_pattern = re.compile(pattern)
+    except re.error as e:
+        raise typer.BadParameter(f"正则表达式无效: {e}") from e
+
+    try:
+        target_list = asyncio.run(_collect_resource_urls(url, compiled_pattern))
+    except Exception as e:
+        raise typer.BadParameter(f"页面访问失败: {e}") from e
+
+    result_urls: list[str] = []
+    for src in target_list:
+        if src.startswith("data:"):
+            continue
+        full_url = urljoin(url, src)
+        if full_url not in result_urls:
+            result_urls.append(full_url)
+
+    if not result_urls:
+        console.print("[yellow]未发现匹配的 URL[/yellow]")
+        return []
+
+    console.print(f"[cyan]匹配到 {len(result_urls)} 个 URL[/cyan]")
+    for item in result_urls:
+        console.print(item)
+
+    return result_urls
+
+
+@app.command()
 def goodbye(name: str, formal: bool = False):
     if formal:
         print(f"Goodbye Ms. {name}. Have a good day.")
@@ -265,6 +382,7 @@ def plugins_list():
 
 def _load_runtime_config(config: str | None = None, workspace: str | None = None) -> Config:
     return Config()
+
 
 if __name__ == "__main__":
     # 运行文件 → 触发 app() → Typer 开始工作 → 解析你的命令 → 执行函数
