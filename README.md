@@ -38,5 +38,5 @@ uv run python src/jxp/cli/commands/commands.py plugins list
 uv run python src/jxp/cli/commands/commands.py down -l "https://files.21voa.com/audio/202503/wilbur-and-orville-wright-the-first-airplane.mp3" -d "/Users/jiaxiaopeng"
 
 
-# reflex
+# reflex页面
 reflex run
