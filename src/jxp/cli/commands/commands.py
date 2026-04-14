@@ -253,19 +253,21 @@ def down(
         raise typer.BadParameter(f"下载失败: {e}") from e
     console.print(f"[green]Downloaded:[/green] {save_path}")
 
-
+#  Typer 的默认行为。Typer 会自动将 Python 函数名中的下划线 _ 转换为连字符 -，以符合命令行工具的命名规范。
 @app.command()
 def find_link(
-        url: str = typer.Option(..., "--url", "-l", help="Page URL to crawl images from"),
-        pattern: str = typer.Option(
-            r"""(?ix)\.(?:jpg|jpeg|png|gif|webp|bmp|svg|ico|avif)(?:\?.*)?$""",
-            "--pattern",
-            "-r",
-            help="Regex used to filter extracted URLs",
-        ),
+    url: str = typer.Option(..., "--url", "-l", help="要爬取的页面 URL"),
+    pattern: str = typer.Option(
+        r"""(?ix)\.(?:jpg|jpeg|png|gif|webp|bmp|svg|ico|avif)(?:\?.*)?""",
+        "--pattern", "-r",
+        help="过滤链接的正则表达式",
+    ),
 ):
-    async def _collect_resource_urls(page_url: str, filter_pattern: re.Pattern[str]) -> list[str]:
-        # 提取 HTML 中的资源地址（img/src、srcset、CSS url() 等）
+    """
+    从指定页面提取所有图片/资源链接
+    """
+
+    async def _collect_resource_urls(page_url: str, filter_pattern: re.Pattern) -> list[str]:
         attr_pattern = re.compile(
             r"""(?ix)
             (?:src|href)\s*=\s*
@@ -287,60 +289,76 @@ def find_link(
             """
         )
         css_url_pattern = re.compile(r"""(?ix)url\(\s*['"]?([^'")]+)['"]?\s*\)""")
-        http_url_pattern = re.compile(r"""https?://[^\s"'<>]+""", re.IGNORECASE)
 
+        # 启动浏览器
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
-            context = await browser.new_context()
+            browser = await p.chromium.launch(headless=True)  # 无头模式更快
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
             page = await context.new_page()
-            await page.goto(page_url, wait_until="networkidle", timeout=60000)
-            html = await page.content()
-            await context.close()
-            await browser.close()
 
-        raw_urls: list[str] = []
-        for match in attr_pattern.finditer(html):
-            raw_urls.append(next((g for g in match.groups() if g), ""))
-        for match in srcset_pattern.finditer(html):
-            srcset_value = next((g for g in match.groups() if g), "")
-            for candidate in srcset_value.split(","):
-                url_part = candidate.strip().split(" ")[0]
-                if url_part:
-                    raw_urls.append(url_part)
-        for match in css_url_pattern.finditer(html):
-            raw_urls.append(match.group(1))
-        raw_urls.extend(http_url_pattern.findall(html))
+            try:
+                await page.goto(page_url, wait_until="networkidle", timeout=60000)
+                html = await page.content()
+            finally:
+                await context.close()
+                await browser.close()
 
-        filtered_urls = [u for u in raw_urls if filter_pattern.search(u)]
-        return filtered_urls if filtered_urls else raw_urls
+        # 收集所有原始链接
+        raw_urls = []
 
+        # src / href
+        for m in attr_pattern.finditer(html):
+            raw_urls.append(next((g for g in m.groups() if g), ""))
+
+        # srcset
+        for m in srcset_pattern.finditer(html):
+            s = next((g for g in m.groups() if g), "")
+            for part in s.split(","):
+                u = part.strip().split(" ")[0]
+                if u:
+                    raw_urls.append(u)
+
+        # css url()
+        for m in css_url_pattern.finditer(html):
+            raw_urls.append(m.group(1))
+
+        # 过滤：只保留匹配正则的
+        filtered = [u.strip() for u in raw_urls if u.strip() and filter_pattern.search(u)]
+        return filtered
+
+    # 编译正则
     try:
-        compiled_pattern = re.compile(pattern)
+        compiled = re.compile(pattern)
     except re.error as e:
-        raise typer.BadParameter(f"正则表达式无效: {e}") from e
+        raise typer.BadParameter(f"正则无效：{e}") from e
 
+    # 运行异步任务
     try:
-        target_list = asyncio.run(_collect_resource_urls(url, compiled_pattern))
+        matched_urls = asyncio.run(_collect_resource_urls(url, compiled))
     except Exception as e:
-        raise typer.BadParameter(f"页面访问失败: {e}") from e
+        raise typer.BadParameter(f"抓取失败：{str(e)}") from e
 
-    result_urls: list[str] = []
-    for src in target_list:
-        if src.startswith("data:"):
+    # 转绝对地址 + 去重
+    result = []
+    for u in matched_urls:
+        if u.startswith("data:"):
             continue
-        full_url = urljoin(url, src)
-        if full_url not in result_urls:
-            result_urls.append(full_url)
+        full = urljoin(url, u)
+        if full not in result:
+            result.append(full)
 
-    if not result_urls:
-        console.print("[yellow]未发现匹配的 URL[/yellow]")
+    # 输出
+    if not result:
+        console.print("[yellow]未找到任何匹配的链接[/yellow]")
         return []
 
-    console.print(f"[cyan]匹配到 {len(result_urls)} 个 URL[/cyan]")
-    for item in result_urls:
-        console.print(item)
+    console.print(f"[cyan]共找到 {len(result)} 个链接：[/cyan]")
+    for link in result:
+        console.print(link)
 
-    return result_urls
+    return result
 
 
 @app.command()
